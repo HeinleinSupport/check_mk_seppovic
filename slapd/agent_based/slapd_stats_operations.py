@@ -31,27 +31,33 @@
 # ldap-instance1,Compare,0,0
 
 from cmk.agent_based.v2 import (
-    check_levels_fixed as check_levels,
+    AgentSection,
+    CheckPlugin,
+    CheckResult,
+    check_levels,
+    DiscoveryResult,
     get_rate,
     get_value_store,
-    register,
-    render,
     Result,
-    Metric,
-    State,
-    ServiceLabel,
     Service,
+    State,
+    StringTable,
 )
 import time
 
-from cmk.agent_based.v2 import AgentSection, SNMPSection, SimpleSNMPSection, CheckPlugin, InventoryPlugin
-
-def parse_slapd_stats_operations(string_table):
+def parse_slapd_stats_operations(string_table: StringTable):
     section = {}
-    for instance, op, initiated, completed in string_table:
-        if not instance in section:
-            section[instance] = {}
-        section[instance][op] = (int(initiated), int(completed))
+    for line in string_table:
+        if len(line) == 4:
+            instance, op, initiated, completed = line
+            if not instance in section:
+                section[instance] = {}
+            section[instance][op] = (int(initiated), int(completed))
+        elif len(line) == 2:
+            instance, error = line
+            if not instance in section:
+                section[instance] = {}
+            section[instance]["error"] = error
     return section
 
 agent_section_slapd_stats_operations = AgentSection(
@@ -59,36 +65,42 @@ agent_section_slapd_stats_operations = AgentSection(
     parse_function=parse_slapd_stats_operations,
 )
 
-def discover_slapd_stats_operations(section):
+def discover_slapd_stats_operations(section) -> DiscoveryResult:
     for instance in section:
         yield Service(item=instance)
 
-def check_slapd_stats_operations(item, params, section):
+def check_slapd_stats_operations(item, params, section) -> CheckResult:
     now = time.time()
     vs = get_value_store()
     deviance = 0
 
     if item in section:
-        for op, (initiated, completed) in section[item].items():
-            deviance = max(deviance, abs(initiated - completed))
-            rate = get_rate(
-                vs,
-                "slapd.stats.operations.%s" % op,
-                now,
-                completed)
-            yield from check_levels(
-                rate,
-                levels_upper=params.get(op),
-                metric_name="slapd_%s" % op.lower(),
-                label="%s rate" % op,
-                render_func=lambda x: "%.2f/s" % x,
-                notice_only=True,
+        if "error" in section[item]:
+            yield Result(
+                state=State.CRIT,
+                summary=section[item]["error"],
             )
-        yield from check_levels(
-            deviance,
-            levels_upper=params.get("deviance"),
-            label="Max. deviance of initiated and completed operations",
-        )
+        else:
+            for op, (initiated, completed) in section[item].items():
+                deviance = max(deviance, abs(initiated - completed))
+                rate = get_rate(
+                    vs,
+                    "slapd.stats.operations.%s" % op,
+                    now,
+                    completed)
+                yield from check_levels(
+                    rate,
+                    levels_upper=params.get(op),
+                    metric_name="slapd_%s" % op.lower(),
+                    label="%s rate" % op,
+                    render_func=lambda x: "%.2f/s" % x,
+                    notice_only=True,
+                )
+            yield from check_levels(
+                deviance,
+                levels_upper=params.get("deviance"),
+                label="Max. deviance of initiated and completed operations",
+            )
 
 check_plugin_slapd_stats_operations = CheckPlugin(
     name="slapd_stats_operations",

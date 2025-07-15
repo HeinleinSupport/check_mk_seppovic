@@ -24,27 +24,33 @@
 
 
 from cmk.agent_based.v2 import (
-    check_levels_fixed as check_levels,
+    AgentSection,
+    CheckPlugin,
+    CheckResult,
+    check_levels,
+    DiscoveryResult,
     get_rate,
     get_value_store,
-    register,
-    render,
     Result,
-    Metric,
-    State,
-    ServiceLabel,
     Service,
+    State,
+    StringTable,
 )
 import time
 
-from cmk.agent_based.v2 import AgentSection, SNMPSection, SimpleSNMPSection, CheckPlugin, InventoryPlugin
-
-def parse_slapd_stats_connections(string_table):
+def parse_slapd_stats_connections(string_table: StringTable):
     section = {}
-    for instance, key, value in string_table:
-        if not instance in section:
-            section[instance] = {}
-        section[instance][key] = int(value)
+    for line in string_table:
+        if len(line) == 3:
+            instance, key, value = line
+            if not instance in section:
+                section[instance] = {}
+            section[instance][key] = int(value)
+        elif len(line) == 2:
+            instance, error = line
+            if not instance in section:
+                section[instance] = {}
+            section[instance]["error"] = error
     return section
 
 agent_section_slapd_stats_connections = AgentSection(
@@ -52,11 +58,11 @@ agent_section_slapd_stats_connections = AgentSection(
     parse_function=parse_slapd_stats_connections,
 )
 
-def discover_slapd_stats_connections(section):
+def discover_slapd_stats_connections(section) -> DiscoveryResult:
     for instance in section:
         yield Service(item=instance)
 
-def check_slapd_stats_connections(item, params, section):
+def check_slapd_stats_connections(item: str, params, section) -> CheckResult:
     map_metric = {
         'Total': 'connections',
         'Current': 'active',
@@ -66,27 +72,33 @@ def check_slapd_stats_connections(item, params, section):
         now = time.time()
         vs = get_value_store()
 
-        for op, value in section[item].items():
-            if op == "Total":
-                rate = get_rate(
-                    vs,
-                    "slapd.stats.connections.%s" % op,
-                    now,
-                    value)
-                yield from check_levels(
-                    rate,
-                    levels_upper=params.get("connections_rate"),
-                    metric_name="connections_rate",
-                    label="Connection Rate",
-                    render_func=lambda x: "%.2f/s" % x,
-                )
-            yield from check_levels(
-                value,
-                levels_upper=params.get(op),
-                metric_name=map_metric[op],
-                label="%s Connections" % op,
-                render_func=lambda x: "%d" % x,
+        if "error" in section[item]:
+            yield Result(
+                state=State.CRIT,
+                summary=section[item]["error"],
             )
+        else:
+            for op, value in section[item].items():
+                if op == "Total":
+                    rate = get_rate(
+                        vs,
+                        "slapd.stats.connections.%s" % op,
+                        now,
+                        value)
+                    yield from check_levels(
+                        rate,
+                        levels_upper=params.get("connections_rate"),
+                        metric_name="connections_rate",
+                        label="Connection Rate",
+                        render_func=lambda x: "%.2f/s" % x,
+                    )
+                yield from check_levels(
+                    value,
+                    levels_upper=params.get(op),
+                    metric_name=map_metric[op],
+                    label="%s Connections" % op,
+                    render_func=lambda x: "%d" % x,
+                )
 
 check_plugin_slapd_stats_connections = CheckPlugin(
     name="slapd_stats_connections",

@@ -23,27 +23,30 @@
 # ldap-master02,Read,2
 
 from cmk.agent_based.v2 import (
-    check_levels_fixed as check_levels,
-    get_rate,
-    get_value_store,
-    register,
-    render,
+    AgentSection,
+    CheckPlugin,
+    CheckResult,
+    check_levels,
+    DiscoveryResult,
     Result,
-    Metric,
-    State,
-    ServiceLabel,
     Service,
+    State,
+    StringTable,
 )
-import time
 
-from cmk.agent_based.v2 import AgentSection, SNMPSection, SimpleSNMPSection, CheckPlugin, InventoryPlugin
-
-def parse_slapd_stats_waiters(string_table):
+def parse_slapd_stats_waiters(string_table: StringTable):
     section = {}
-    for instance, key, value in string_table:
-        if not instance in section:
-            section[instance] = {}
-        section[instance][key] = int(value)
+    for line in string_table:
+        if len(line) == 3:
+            instance, key, value = line
+            if not instance in section:
+                section[instance] = {}
+            section[instance][key] = int(value)
+        elif len(line) == 2:
+            instance, error = line
+            if not instance in section:
+                section[instance] = {}
+            section[instance]["error"] = error
     return section
 
 agent_section_slapd_stats_waiters = AgentSection(
@@ -51,20 +54,26 @@ agent_section_slapd_stats_waiters = AgentSection(
     parse_function=parse_slapd_stats_waiters,
 )
 
-def discover_slapd_stats_waiters(section):
+def discover_slapd_stats_waiters(section) -> DiscoveryResult:
     for instance in section:
         yield Service(item=instance)
 
-def check_slapd_stats_waiters(item, params, section):
+def check_slapd_stats_waiters(item: str, params, section) -> CheckResult:
     if item in section:
-        for op, value in section[item].items():
-            yield from check_levels(
-                value,
-                levels_upper=params.get(op),
-                metric_name="slapd_waiters_%s" % op.lower(),
-                label="%s Waiters" % op,
-                render_func=lambda x: "%d" % x,
+        if "error" in section[item]:
+            yield Result(
+                state=State.CRIT,
+                summary=section[item]["error"],
             )
+        else:
+            for op, value in section[item].items():
+                yield from check_levels(
+                    value,
+                    levels_upper=params.get(op),
+                    metric_name="slapd_waiters_%s" % op.lower(),
+                    label="%s Waiters" % op,
+                    render_func=lambda x: "%d" % x,
+                )
 
 check_plugin_slapd_stats_waiters = CheckPlugin(
     name="slapd_stats_waiters",

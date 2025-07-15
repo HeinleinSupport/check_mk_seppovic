@@ -30,12 +30,9 @@ from cmk.agent_based.v2 import (
     CheckResult,
     check_levels,
     DiscoveryResult,
-    register,
     render,
     Result,
-    Metric,
     State,
-    ServiceLabel,
     Service,
     StringTable,
 )

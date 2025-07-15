@@ -23,27 +23,31 @@
 # ldap-master02,ldap-master03,0.00
 
 from cmk.agent_based.v2 import (
-    check_levels_fixed as check_levels,
-    get_rate,
-    get_value_store,
-    register,
+    AgentSection,
+    CheckPlugin,
+    CheckResult,
+    check_levels,
+    DiscoveryResult,
     render,
     Result,
-    Metric,
     State,
-    ServiceLabel,
     Service,
+    StringTable,
 )
-import time
 
-from cmk.agent_based.v2 import AgentSection, SNMPSection, SimpleSNMPSection, CheckPlugin, InventoryPlugin
-
-def parse_slapd_syncrepl(string_table):
+def parse_slapd_syncrepl(string_table: StringTable):
     section = {}
-    for instance, master, value in string_table:
-        if not instance in section:
-            section[instance] = {}
-        section[instance][master] = value
+    for line in string_table:
+        if len(line) == 3:
+            instance, master, value = line
+            if not instance in section:
+                section[instance] = {}
+            section[instance][master] = value
+        elif len(line) == 2:
+            instance, error = line
+            if not instance in section:
+                section[instance] = {}
+            section[instance]["error"] = error
     return section
 
 agent_section_slapd_syncrepl = AgentSection(
@@ -51,27 +55,33 @@ agent_section_slapd_syncrepl = AgentSection(
     parse_function=parse_slapd_syncrepl,
 )
 
-def discover_slapd_syncrepl(section):
+def discover_slapd_syncrepl(section) -> DiscoveryResult:
     for instance in section:
-        for master, value in section[instance].items():
+        for master in section[instance]:
             yield Service(item="%s %s" % (instance, master))
 
-def check_slapd_syncrepl(item, params, section):
+def check_slapd_syncrepl(item: str, params, section) -> CheckResult:
     instance, master = item.split(" ")
     if instance in section:
-        if master in section[instance]:
-            value = section[instance][master]
-            if value.startswith("ERROR"):
-                yield Result(state=State.CRIT,
-                             summary=value)
-            else:
-                yield from check_levels(
-                    float(value),
-                    levels_upper=params.get("levels"),
-                    label="Difference with Provider %s" % master,
-                    metric_name="time_difference",
-                    render_func=render.timespan,
-                )
+        if "error" in section[instance]:
+            yield Result(
+                state=State.CRIT,
+                summary=section[instance]["error"],
+            )
+        else:
+            if master in section[instance]:
+                value = section[instance][master]
+                if value.startswith("ERROR"):
+                    yield Result(state=State.CRIT,
+                                summary=value)
+                else:
+                    yield from check_levels(
+                        float(value),
+                        levels_upper=params.get("levels"),
+                        label="Difference with Provider %s" % master,
+                        metric_name="time_difference",
+                        render_func=render.timespan,
+                    )
 
 check_plugin_slapd_syncrepl = CheckPlugin(
     name="slapd_syncrepl",
