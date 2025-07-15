@@ -30,8 +30,8 @@
 # ldap-instance1,Modrdn,0,0
 # ldap-instance1,Compare,0,0
 
-from .agent_based_api.v1 import (
-    check_levels,
+from cmk.agent_based.v2 import (
+    check_levels_fixed as check_levels,
     get_rate,
     get_value_store,
     register,
@@ -44,6 +44,8 @@ from .agent_based_api.v1 import (
 )
 import time
 
+from cmk.agent_based.v2 import AgentSection, SNMPSection, SimpleSNMPSection, CheckPlugin, InventoryPlugin
+
 def parse_slapd_stats_operations(string_table):
     section = {}
     for instance, op, initiated, completed in string_table:
@@ -52,7 +54,7 @@ def parse_slapd_stats_operations(string_table):
         section[instance][op] = (int(initiated), int(completed))
     return section
 
-register.agent_section(
+agent_section_slapd_stats_operations = AgentSection(
     name="slapd_stats_operations",
     parse_function=parse_slapd_stats_operations,
 )
@@ -88,7 +90,7 @@ def check_slapd_stats_operations(item, params, section):
             label="Max. deviance of initiated and completed operations",
         )
 
-register.check_plugin(
+check_plugin_slapd_stats_operations = CheckPlugin(
     name="slapd_stats_operations",
     service_name="SLAPD %s Operations",
     sections=["slapd_stats_operations"],

@@ -24,8 +24,12 @@
 # ldap-slave2|ERROR - could not bind as cn=Monitor : Invalid credentials at ./slapd.pl line 344
 #  at ./slapd.pl line 344
 
-from .agent_based_api.v1 import (
+from cmk.agent_based.v2 import (
+    AgentSection,
+    CheckPlugin,
+    CheckResult,
     check_levels,
+    DiscoveryResult,
     register,
     render,
     Result,
@@ -33,24 +37,25 @@ from .agent_based_api.v1 import (
     State,
     ServiceLabel,
     Service,
+    StringTable,
 )
 
-def parse_slapd_instance(string_table):
+def parse_slapd_instance(string_table: StringTable):
     section = {}
     for instance, conn_time in string_table:
         section[instance] = conn_time
     return section
 
-register.agent_section(
+agent_section_slapd_instance = AgentSection(
     name="slapd_instance",
     parse_function=parse_slapd_instance,
 )
 
-def discover_slapd_instance(section):
+def discover_slapd_instance(section) -> DiscoveryResult:
     for instance in section:
         yield Service(item=instance)
 
-def check_slapd_instance(item, params, section):
+def check_slapd_instance(item: str, params, section) -> CheckResult:
     if item in section:
         value = section[item]
         if value.startswith("ERROR"):
@@ -65,14 +70,14 @@ def check_slapd_instance(item, params, section):
                 render_func=render.timespan,
             )
 
-register.check_plugin(
+check_plugin_slapd_instance = CheckPlugin(
     name="slapd_instance",
     service_name="SLAPD %s",
     sections=["slapd_instance"],
     discovery_function=discover_slapd_instance,
     check_function=check_slapd_instance,
     check_default_parameters={
-        'maxConnectionTime': (0.5, 0.8)
+        'maxConnectionTime': ("fixed", (0.5, 0.8)),
     },
     check_ruleset_name="slapd_instance",
 )

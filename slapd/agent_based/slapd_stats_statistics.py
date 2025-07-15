@@ -18,13 +18,14 @@
 
 
 # Example Output:
-# <<<slapd_stats_connections:sep(44)>>>
-# ldap-slave1,Total,8555
-# ldap-slave1,Current,16
+# <<<slapd_stats_statistics:sep(44)>>>
+# ldap-slave1,Entries,111386
+# ldap-slave1,Referrals,0
+# ldap-slave1,PDU,213505
+# ldap-slave1,Bytes,17979195
 
-
-from .agent_based_api.v1 import (
-    check_levels,
+from cmk.agent_based.v2 import (
+    check_levels_fixed as check_levels,
     get_rate,
     get_value_store,
     register,
@@ -37,7 +38,9 @@ from .agent_based_api.v1 import (
 )
 import time
 
-def parse_slapd_stats_connections(string_table):
+from cmk.agent_based.v2 import AgentSection, SNMPSection, SimpleSNMPSection, CheckPlugin, InventoryPlugin
+
+def parse_slapd_stats_statistics(string_table):
     section = {}
     for instance, key, value in string_table:
         if not instance in section:
@@ -45,54 +48,47 @@ def parse_slapd_stats_connections(string_table):
         section[instance][key] = int(value)
     return section
 
-register.agent_section(
-    name="slapd_stats_connections",
-    parse_function=parse_slapd_stats_connections,
+agent_section_slapd_stats_statistics = AgentSection(
+    name="slapd_stats_statistics",
+    parse_function=parse_slapd_stats_statistics,
 )
 
-def discover_slapd_stats_connections(section):
+def discover_slapd_stats_statistics(section):
     for instance in section:
         yield Service(item=instance)
 
-def check_slapd_stats_connections(item, params, section):
+def check_slapd_stats_statistics(item, params, section):
     map_metric = {
-        'Total': 'connections',
-        'Current': 'active',
+        'Entries': 'slapd_entries_sent',
+        'Referrals': 'slapd_referrals_sent',
+        'PDU': 'slapd_pdu_sent',
+        'Bytes': 'net_data_sent',
     }
-    
+
     if item in section:
         now = time.time()
         vs = get_value_store()
 
         for op, value in section[item].items():
-            if op == "Total":
-                rate = get_rate(
-                    vs,
-                    "slapd.stats.connections.%s" % op,
-                    now,
-                    value)
-                yield from check_levels(
-                    rate,
-                    levels_upper=params.get("connections_rate"),
-                    metric_name="connections_rate",
-                    label="Connection Rate",
-                    render_func=lambda x: "%.2f/s" % x,
-                )
+            rate = get_rate(
+                vs,
+                "slapd.stats.statistics.%s" % op,
+                now,
+                value)
             yield from check_levels(
-                value,
+                rate,
                 levels_upper=params.get(op),
                 metric_name=map_metric[op],
-                label="%s Connections" % op,
-                render_func=lambda x: "%d" % x,
+                label="Rate of sent %s" %op,
+                render_func=lambda x: "%.2f/s" % x,
             )
-
-register.check_plugin(
-    name="slapd_stats_connections",
-    service_name="SLAPD %s Connections",
-    sections=["slapd_stats_connections"],
-    discovery_function=discover_slapd_stats_connections,
-    check_function=check_slapd_stats_connections,
-    check_default_parameters={
-    },
-    check_ruleset_name="slapd_stats_connections",
+ 
+check_plugin_slapd_stats_statistics = CheckPlugin(
+    name="slapd_stats_statistics",
+    service_name="SLAPD %s statistics",
+    sections=["slapd_stats_statistics"],
+    discovery_function=discover_slapd_stats_statistics,
+    check_function=check_slapd_stats_statistics,
+    check_default_parameters={},
+    check_ruleset_name="slapd_stats_statistics",
 )

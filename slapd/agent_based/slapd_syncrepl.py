@@ -22,8 +22,8 @@
 # ldap-master02,ldap-master01,0.00
 # ldap-master02,ldap-master03,0.00
 
-from .agent_based_api.v1 import (
-    check_levels,
+from cmk.agent_based.v2 import (
+    check_levels_fixed as check_levels,
     get_rate,
     get_value_store,
     register,
@@ -36,6 +36,8 @@ from .agent_based_api.v1 import (
 )
 import time
 
+from cmk.agent_based.v2 import AgentSection, SNMPSection, SimpleSNMPSection, CheckPlugin, InventoryPlugin
+
 def parse_slapd_syncrepl(string_table):
     section = {}
     for instance, master, value in string_table:
@@ -44,7 +46,7 @@ def parse_slapd_syncrepl(string_table):
         section[instance][master] = value
     return section
 
-register.agent_section(
+agent_section_slapd_syncrepl = AgentSection(
     name="slapd_syncrepl",
     parse_function=parse_slapd_syncrepl,
 )
@@ -71,7 +73,7 @@ def check_slapd_syncrepl(item, params, section):
                     render_func=render.timespan,
                 )
 
-register.check_plugin(
+check_plugin_slapd_syncrepl = CheckPlugin(
     name="slapd_syncrepl",
     service_name="SLAPD %s syncrepl status",
     sections=["slapd_syncrepl"],
