@@ -87,7 +87,7 @@ def check_slapd_stats_connections(item: str, params, section) -> CheckResult:
                         value)
                     yield from check_levels(
                         rate,
-                        levels_upper=params.get("connections_rate"),
+                        levels_upper=params.get("rate"),
                         metric_name="connections_rate",
                         label="Connection Rate",
                         render_func=lambda x: "%.2f/s" % x,
