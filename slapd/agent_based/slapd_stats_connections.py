@@ -106,7 +106,6 @@ check_plugin_slapd_stats_connections = CheckPlugin(
     sections=["slapd_stats_connections"],
     discovery_function=discover_slapd_stats_connections,
     check_function=check_slapd_stats_connections,
-    check_default_parameters={
-    },
+    check_default_parameters={},
     check_ruleset_name="slapd_stats_connections",
 )
