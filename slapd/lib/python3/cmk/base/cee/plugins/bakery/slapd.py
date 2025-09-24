@@ -15,38 +15,56 @@
 # to the Free Software Foundation, Inc., 51 Franklin St,  Fifth Floor,
 # Boston, MA 02110-1301 USA.
 
-from pathlib import Path
-from typing import Any, Dict
+from pathlib import Path # type: ignore
+from typing import Any, Dict # type: ignore
 
-from .bakery_api.v1 import FileGenerator, OS, Plugin, PluginConfig, register
+from cmk.base.plugins.bakery.bakery_api.v1 import (
+    FileGenerator,
+    OS,
+    Plugin,
+    PluginConfig,
+    register,
+    password_store,
+)
+
+def _get_password(v):
+    if isinstance(v, tuple):
+        if v[0] == "cmk_postprocessed":
+            if v[1] == "explicit_password":
+                return v[2][1]
+            if v[1] == "stored_password":
+                return password_store.lookup_for_bakery(v[2][0])
+    return v
 
 def get_slapd_files(conf: Dict[str, Any]) -> FileGenerator:
-    yield Plugin(base_os=OS.LINUX,
-                 source=Path("slapd.pl"))
+    if conf.get("deploy"):
+        yield Plugin(base_os=OS.LINUX,
+                        source=Path("slapd.pl"))
 
-    content = ["%slapd_instances = ("]
+        content = ["%slapd_instances = ("]
 
-    for instance, instconf in conf:
-        content += ["  '%s' => {" % instance]
-        for key, value in instconf.items():
-            if key == 'syncrepl':
-                content += ["    'syncrepl' => ["]
-                for syncreplconf in value:
-                    content += ["      {"]
-                    for key, value in syncreplconf.items():
-                        content += ["      '%s' => '%s'," % (key, value)]
-                    content += ["      },"]
-                content += ["    ],"]
-            else:
-                content += ["    '%s' => '%s'," % (key, value)]
-        content += ["  },"]
+        for instance in conf["instances"]:
+            content += ["  '%s' => {" % instance["instance"]]
+            instconf = instance["config"]
+            for key, value in instconf.items():
+                if key == 'syncrepl':
+                    content += ["    'syncrepl' => ["]
+                    for syncreplconf in value:
+                        content += ["      {"]
+                        for key, value in syncreplconf.items():
+                            content += ["      '%s' => '%s'," % (key, _get_password(value))]
+                        content += ["      },"]
+                    content += ["    ],"]
+                else:
+                    content += ["    '%s' => '%s'," % (key, _get_password(value))]
+            content += ["  },"]
 
-    content += [");"]
+        content += [");"]
 
-    yield PluginConfig(base_os=OS.LINUX,
-                       lines=content,
-                       target=Path("slapd.cfg"),
-                       include_header=True)
+        yield PluginConfig(base_os=OS.LINUX,
+                            lines=content,
+                            target=Path("slapd.cfg"),
+                            include_header=True)
 
 register.bakery_plugin(
     name="slapd",
