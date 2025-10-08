@@ -14,7 +14,6 @@ from cmk.rulesets.v1.form_specs import (
     Integer,
     InputHint,
     List,
-    migrate_to_integer_simple_levels,
     migrate_to_password,
     Password,
     String,
@@ -81,7 +80,6 @@ def _valuespec_agent_config_slapd():
                                         "server": DictElement(
                                             parameter_form=String(
                                                 title=Title("Hostname"),
-                                                custom_validate=[validators.HostAddress()],
                                             )),
                                         "binddn": DictElement(
                                             required=True,
@@ -127,7 +125,6 @@ def _valuespec_agent_config_slapd():
                                                         "server": DictElement(
                                                             parameter_form=String(
                                                                 title=Title("Hostname"),
-                                                                custom_validate=[validators.HostAddress()],
                                                             )),
                                                         "binddn": DictElement(
                                                             required=True,
